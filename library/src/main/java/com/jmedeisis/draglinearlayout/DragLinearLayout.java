@@ -19,16 +19,14 @@ import android.support.v4.view.MotionEventCompat;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
-import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import android.view.ViewTreeObserver.OnPreDrawListener;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import static android.widget.LinearLayout.VERTICAL;
-import static android.widget.LinearLayout.HORIZONTAL;
 
 /**
  * A LinearLayout that supports children Views that can be dragged and swapped around.
@@ -105,12 +103,12 @@ public class DragLinearLayout extends LinearLayout {
         private BitmapDrawable viewDrawable;
         private int position;
         private int startTop;
-        private int startRight;
+        private int startLeft;
         private int height;
         private int width;
         private int totalDragOffset;
         private int targetTopOffset;
-        private int targetRightOffset;
+        private int targetLeftOffset;
         private ValueAnimator settleAnimation;
 
         private boolean detecting;
@@ -126,12 +124,12 @@ public class DragLinearLayout extends LinearLayout {
             this.viewDrawable = getDragDrawable(view);
             this.position = position;
             this.startTop = view.getTop();
-            this.startRight = view.getRight();
+            this.startLeft = view.getLeft();
             this.width = view.getWidth();
             this.height = view.getHeight();
             this.totalDragOffset = 0;
             this.targetTopOffset = 0;
-            this.targetRightOffset = 0;
+            this.targetLeftOffset = 0;
             this.settleAnimation = null;
 
             this.detecting = true;
@@ -147,7 +145,7 @@ public class DragLinearLayout extends LinearLayout {
             if (orientation == VERTICAL) {
                 updateTargetTop();
             } else {
-                updateTargetRight();
+                updateTargetLeft();
             }
         }
 
@@ -155,8 +153,8 @@ public class DragLinearLayout extends LinearLayout {
             targetTopOffset = startTop - view.getTop() + totalDragOffset;
         }
 
-        public void updateTargetRight() {
-            targetRightOffset = startRight - view.getRight() + totalDragOffset;
+        public void updateTargetLeft() {
+            targetLeftOffset = startLeft - view.getLeft() + totalDragOffset;
         }
 
         public void onDragStop() {
@@ -180,9 +178,9 @@ public class DragLinearLayout extends LinearLayout {
                 height = -1;
                 targetTopOffset = 0;
             } else {
-                startRight = -1;
+                startLeft = -1;
                 width = -1;
-                targetRightOffset = 0;
+                targetLeftOffset = 0;
             }
             if (null != settleAnimation) settleAnimation.end();
             settleAnimation = null;
@@ -214,8 +212,11 @@ public class DragLinearLayout extends LinearLayout {
      * See {@link #setContainerScrollView(android.widget.ScrollView)}.
      */
     private ScrollView containerScrollView;
+    private HorizontalScrollView horizontalContainerScrollView;
     private int scrollSensitiveAreaHeight;
+    private int scrollSensitiveAreaWidth;
     private static final int DEFAULT_SCROLL_SENSITIVE_AREA_HEIGHT_DP = 48;
+    private static final int DEFAULT_SCROLL_SENSITIVE_AREA_WIDTH_DP = 48;
     private static final int MAX_DRAG_SCROLL_SPEED = 16;
 
     public DragLinearLayout(Context context) {
@@ -240,6 +241,8 @@ public class DragLinearLayout extends LinearLayout {
         try {
             scrollSensitiveAreaHeight = a.getDimensionPixelSize(R.styleable.DragLinearLayout_scrollSensitiveHeight,
                     (int) (DEFAULT_SCROLL_SENSITIVE_AREA_HEIGHT_DP * resources.getDisplayMetrics().density + 0.5f));
+            scrollSensitiveAreaWidth = a.getDimensionPixelSize(R.styleable.DragLinearLayout_scrollSensitiveWidth,
+                (int) (DEFAULT_SCROLL_SENSITIVE_AREA_WIDTH_DP * resources.getDisplayMetrics().density + 0.5f));
         } finally {
             a.recycle();
         }
@@ -335,7 +338,19 @@ public class DragLinearLayout extends LinearLayout {
      * can be scrolled during item drags.
      */
     public void setContainerScrollView(ScrollView scrollView) {
+        setVerticalContainerScrollView(scrollView);
+    }
+
+    public void setVerticalContainerScrollView(ScrollView scrollView) {
         this.containerScrollView = scrollView;
+    }
+
+  /**
+   * If this layout is within a {@link android.widget.HorizontalScrollView}, register it here so that
+   * it can be scrolled during item drags
+   */
+  public void setHorizontalContainerScrollView(HorizontalScrollView scrollView) {
+        this.horizontalContainerScrollView = scrollView;
     }
 
     /**
@@ -382,8 +397,14 @@ public class DragLinearLayout extends LinearLayout {
         draggableChildren.get(position).endExistingAnimation();
 
         draggedItem.startDetectingOnPossibleDrag(child, position);
-        if (containerScrollView != null) {
-            containerScrollView.requestDisallowInterceptTouchEvent(true);
+        if (orientation == VERTICAL) {
+            if (containerScrollView != null) {
+                containerScrollView.requestDisallowInterceptTouchEvent(true);
+            }
+        } else {
+            if (horizontalContainerScrollView != null) {
+                horizontalContainerScrollView.requestDisallowInterceptTouchEvent(true);
+            }
         }
     }
 
@@ -451,25 +472,28 @@ public class DragLinearLayout extends LinearLayout {
      * Evaluates and executes draggable view swaps.
      */
     private void onDrag(final int offset) {
-        draggedItem.setTotalOffset(offset);
-        invalidate();
+        if (orientation == HORIZONTAL) {
+          onDragHorizontal(offset);
+        } else {
+          draggedItem.setTotalOffset(offset);
+          invalidate();
 
-        int currentTop = draggedItem.startTop + draggedItem.totalDragOffset;
+          int currentTop = draggedItem.startTop + draggedItem.totalDragOffset;
 
-        handleContainerScroll(currentTop);
+          handleContainerScroll(currentTop);
 
-        int belowPosition = nextDraggablePosition(draggedItem.position);
-        int abovePosition = previousDraggablePosition(draggedItem.position);
+          int belowPosition = nextDraggablePosition(draggedItem.position);
+          int abovePosition = previousDraggablePosition(draggedItem.position);
 
-        View belowView = getChildAt(belowPosition);
-        View aboveView = getChildAt(abovePosition);
+          View belowView = getChildAt(belowPosition);
+          View aboveView = getChildAt(abovePosition);
 
-        final boolean isBelow = (belowView != null) &&
-                (currentTop + draggedItem.height > belowView.getTop() + belowView.getHeight() / 2);
-        final boolean isAbove = (aboveView != null) &&
-                (currentTop < aboveView.getTop() + aboveView.getHeight() / 2);
+          final boolean isBelow = (belowView != null) && (currentTop + draggedItem.height
+              > belowView.getTop() + belowView.getHeight() / 2);
+          final boolean isAbove =
+              (aboveView != null) && (currentTop < aboveView.getTop() + aboveView.getHeight() / 2);
 
-        if (isBelow || isAbove) {
+          if (isBelow || isAbove) {
             final View switchView = isBelow ? belowView : aboveView;
 
             // swap elements
@@ -480,72 +504,170 @@ public class DragLinearLayout extends LinearLayout {
             final float switchViewStartY = switchView.getY();
 
             if (null != swapListener) {
-                swapListener.onSwap(draggedItem.view, draggedItem.position, switchView, switchPosition);
+              swapListener.onSwap(draggedItem.view, draggedItem.position, switchView, switchPosition);
             }
 
             if (isBelow) {
-                removeViewAt(originalPosition);
-                removeViewAt(switchPosition - 1);
+              removeViewAt(originalPosition);
+              removeViewAt(switchPosition - 1);
 
-                addView(belowView, originalPosition);
-                addView(draggedItem.view, switchPosition);
+              addView(belowView, originalPosition);
+              addView(draggedItem.view, switchPosition);
             } else {
-                removeViewAt(switchPosition);
-                removeViewAt(originalPosition - 1);
+              removeViewAt(switchPosition);
+              removeViewAt(originalPosition - 1);
 
-                addView(draggedItem.view, switchPosition);
-                addView(aboveView, originalPosition);
+              addView(draggedItem.view, switchPosition);
+              addView(aboveView, originalPosition);
             }
             draggedItem.position = switchPosition;
 
             final ViewTreeObserver switchViewObserver = switchView.getViewTreeObserver();
             switchViewObserver.addOnPreDrawListener(new OnPreDrawListener() {
-                @Override
-                public boolean onPreDraw() {
-                    switchViewObserver.removeOnPreDrawListener(this);
+              @Override
+              public boolean onPreDraw() {
+                switchViewObserver.removeOnPreDrawListener(this);
 
-                    final ObjectAnimator switchAnimator = ObjectAnimator.ofFloat(switchView, "y",
-                            switchViewStartY, switchView.getTop())
-                            .setDuration(getTranslateAnimationDuration(switchView.getTop() - switchViewStartY));
-                    switchAnimator.addListener(new AnimatorListenerAdapter() {
-                        @Override
-                        public void onAnimationStart(Animator animation) {
-                            draggableChildren.get(originalPosition).swapAnimation = switchAnimator;
-                        }
+                final ObjectAnimator switchAnimator =
+                    ObjectAnimator.ofFloat(switchView, "y", switchViewStartY, switchView.getTop())
+                        .setDuration(getTranslateAnimationDuration(switchView.getTop() - switchViewStartY));
+                switchAnimator.addListener(new AnimatorListenerAdapter() {
+                  @Override
+                  public void onAnimationStart(Animator animation) {
+                    draggableChildren.get(originalPosition).swapAnimation = switchAnimator;
+                  }
 
-                        @Override
-                        public void onAnimationEnd(Animator animation) {
-                            draggableChildren.get(originalPosition).swapAnimation = null;
-                        }
-                    });
-                    switchAnimator.start();
+                  @Override
+                  public void onAnimationEnd(Animator animation) {
+                    draggableChildren.get(originalPosition).swapAnimation = null;
+                  }
+                });
+                switchAnimator.start();
 
-                    return true;
-                }
+                return true;
+              }
             });
 
             final ViewTreeObserver observer = draggedItem.view.getViewTreeObserver();
             observer.addOnPreDrawListener(new OnPreDrawListener() {
-                @Override
-                public boolean onPreDraw() {
-                    observer.removeOnPreDrawListener(this);
-                    draggedItem.updateTargetTop();
+              @Override
+              public boolean onPreDraw() {
+                observer.removeOnPreDrawListener(this);
+                draggedItem.updateTargetTop();
 
-                    // TODO test if still necessary..
-                    // because draggedItem#view#getTop() is only up-to-date NOW
-                    // (and not right after the #addView() swaps above)
-                    // we may need to update an ongoing settle animation
-                    if (draggedItem.settling()) {
-                        Log.d(LOG_TAG, "Updating settle animation");
-                        draggedItem.settleAnimation.removeAllListeners();
-                        draggedItem.settleAnimation.cancel();
-                        onDragStop();
-                    }
-                    return true;
+                // TODO test if still necessary..
+                // because draggedItem#view#getTop() is only up-to-date NOW
+                // (and not right after the #addView() swaps above)
+                // we may need to update an ongoing settle animation
+                if (draggedItem.settling()) {
+                  Log.d(LOG_TAG, "Updating settle animation");
+                  draggedItem.settleAnimation.removeAllListeners();
+                  draggedItem.settleAnimation.cancel();
+                  onDragStop();
                 }
+                return true;
+              }
             });
+          }
         }
     }
+
+  private void onDragHorizontal(final int offset) {
+    draggedItem.setTotalOffset(offset);
+    invalidate();
+
+    int currentLeft = draggedItem.startLeft + draggedItem.totalDragOffset;
+
+    handleContainerScroll(currentLeft);
+
+    int leftPosition = nextDraggablePosition(draggedItem.position);
+    int rightPosition = previousDraggablePosition(draggedItem.position);
+
+    View leftView = getChildAt(leftPosition);
+    View rightView = getChildAt(rightPosition);
+
+    final boolean isLeft = (leftView != null) &&
+        (currentLeft + draggedItem.width > leftView.getLeft() + leftView.getWidth() / 2);
+    final boolean isRight = (rightView != null) &&
+        (currentLeft < rightView.getLeft() + rightView.getWidth() / 2);
+
+    if (isLeft || isRight) {
+      final View switchView = isLeft ? leftView : rightView;
+
+      // swap elements
+      final int originalPosition = draggedItem.position;
+      final int switchPosition = isLeft ? leftPosition : rightPosition;
+
+      draggableChildren.get(switchPosition).cancelExistingAnimation();
+      final float switchViewStartX = switchView.getX();
+
+      if (null != swapListener) {
+        swapListener.onSwap(draggedItem.view, draggedItem.position, switchView, switchPosition);
+      }
+
+      if (isLeft) {
+        removeViewAt(originalPosition);
+        removeViewAt(switchPosition - 1);
+
+        addView(leftView, originalPosition);
+        addView(draggedItem.view, switchPosition);
+      } else {
+        removeViewAt(switchPosition);
+        removeViewAt(originalPosition - 1);
+
+        addView(draggedItem.view, switchPosition);
+        addView(rightView, originalPosition);
+      }
+      draggedItem.position = switchPosition;
+
+      final ViewTreeObserver switchViewObserver = switchView.getViewTreeObserver();
+      switchViewObserver.addOnPreDrawListener(new OnPreDrawListener() {
+        @Override
+        public boolean onPreDraw() {
+          switchViewObserver.removeOnPreDrawListener(this);
+
+          final ObjectAnimator switchAnimator = ObjectAnimator.ofFloat(switchView, "x",
+              switchViewStartX, switchView.getLeft())
+              .setDuration(getTranslateAnimationDuration(switchView.getLeft() - switchViewStartX));
+          switchAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+              draggableChildren.get(originalPosition).swapAnimation = switchAnimator;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+              draggableChildren.get(originalPosition).swapAnimation = null;
+            }
+          });
+          switchAnimator.start();
+
+          return true;
+        }
+      });
+
+      final ViewTreeObserver observer = draggedItem.view.getViewTreeObserver();
+      observer.addOnPreDrawListener(new OnPreDrawListener() {
+        @Override
+        public boolean onPreDraw() {
+          observer.removeOnPreDrawListener(this);
+          draggedItem.updateTargetLeft();
+
+          // TODO test if still necessary..
+          // because draggedItem#view#getTop() is only up-to-date NOW
+          // (and not right after the #addView() swaps above)
+          // we may need to update an ongoing settle animation
+          if (draggedItem.settling()) {
+            Log.d(LOG_TAG, "Updating settle animation");
+            draggedItem.settleAnimation.removeAllListeners();
+            draggedItem.settleAnimation.cancel();
+            onDragStop();
+          }
+          return true;
+        }
+      });
+    }
+  }
 
     private int previousDraggablePosition(int position) {
         int startIndex = draggableChildren.indexOfKey(position);
@@ -653,10 +775,15 @@ public class DragLinearLayout extends LinearLayout {
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
+        boolean vertical = orientation == VERTICAL;
         switch (MotionEventCompat.getActionMasked(event)) {
             case MotionEvent.ACTION_DOWN: {
                 if (draggedItem.detecting) return false; // an existing item is (likely) settling
-                downY = (int) MotionEventCompat.getY(event, 0);
+                if (vertical) {
+                  downY = (int) MotionEventCompat.getY(event, 0);
+                } else {
+                  downX = (int) MotionEventCompat.getX(event, 0);
+                }
                 activePointerId = MotionEventCompat.getPointerId(event, 0);
                 break;
             }
@@ -664,9 +791,11 @@ public class DragLinearLayout extends LinearLayout {
                 if (!draggedItem.detecting) return false;
                 if (INVALID_POINTER_ID == activePointerId) break;
                 final int pointerIndex = event.findPointerIndex(activePointerId);
-                final float y = MotionEventCompat.getY(event, pointerIndex);
-                final float dy = y - downY;
-                if (Math.abs(dy) > slop) {
+
+                final float value = vertical ? MotionEventCompat.getY(event, pointerIndex) : MotionEventCompat.getX(event, pointerIndex);
+                final float delta = value - (vertical ? downY : downX);
+
+                if (Math.abs(delta) > slop) {
                     startDrag();
                     return true;
                 }
@@ -693,6 +822,7 @@ public class DragLinearLayout extends LinearLayout {
 
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
+        boolean vertical = orientation == VERTICAL;
         switch (MotionEventCompat.getActionMasked(event)) {
             case MotionEvent.ACTION_DOWN: {
                 if (!draggedItem.detecting || draggedItem.settling()) return false;
@@ -704,10 +834,10 @@ public class DragLinearLayout extends LinearLayout {
                 if (INVALID_POINTER_ID == activePointerId) break;
 
                 int pointerIndex = event.findPointerIndex(activePointerId);
-                int lastEventY = (int) MotionEventCompat.getY(event, pointerIndex);
-                int deltaY = lastEventY - downY;
+                int lastEventValue = (int) (vertical ? MotionEventCompat.getY(event, pointerIndex) : MotionEventCompat.getX(event, pointerIndex);
+                int delta = lastEventValue - downY;
 
-                onDrag(deltaY);
+                onDrag(delta);
                 return true;
             }
             case MotionEvent.ACTION_POINTER_UP: {
