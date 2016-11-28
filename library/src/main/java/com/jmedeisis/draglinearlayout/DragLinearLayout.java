@@ -19,6 +19,7 @@ import android.support.v4.view.MotionEventCompat;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
+import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -26,6 +27,8 @@ import android.view.ViewTreeObserver;
 import android.view.ViewTreeObserver.OnPreDrawListener;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import static android.widget.LinearLayout.VERTICAL;
+import static android.widget.LinearLayout.HORIZONTAL;
 
 /**
  * A LinearLayout that supports children Views that can be dragged and swapped around.
@@ -45,6 +48,7 @@ public class DragLinearLayout extends LinearLayout {
     private static final long MAX_SWITCH_DURATION = NOMINAL_SWITCH_DURATION * 2;
     private static final float NOMINAL_DISTANCE = 20;
     private final float nominalDistanceScaled;
+    private int orientation;
 
     /**
      * Use with {@link com.jmedeisis.draglinearlayout.DragLinearLayout#setOnViewSwapListener(com.jmedeisis.draglinearlayout.DragLinearLayout.OnViewSwapListener)}
@@ -101,9 +105,12 @@ public class DragLinearLayout extends LinearLayout {
         private BitmapDrawable viewDrawable;
         private int position;
         private int startTop;
+        private int startRight;
         private int height;
+        private int width;
         private int totalDragOffset;
         private int targetTopOffset;
+        private int targetRightOffset;
         private ValueAnimator settleAnimation;
 
         private boolean detecting;
@@ -119,9 +126,12 @@ public class DragLinearLayout extends LinearLayout {
             this.viewDrawable = getDragDrawable(view);
             this.position = position;
             this.startTop = view.getTop();
+            this.startRight = view.getRight();
+            this.width = view.getWidth();
             this.height = view.getHeight();
             this.totalDragOffset = 0;
             this.targetTopOffset = 0;
+            this.targetRightOffset = 0;
             this.settleAnimation = null;
 
             this.detecting = true;
@@ -134,11 +144,19 @@ public class DragLinearLayout extends LinearLayout {
 
         public void setTotalOffset(int offset) {
             totalDragOffset = offset;
-            updateTargetTop();
+            if (orientation == VERTICAL) {
+                updateTargetTop();
+            } else {
+                updateTargetRight();
+            }
         }
 
         public void updateTargetTop() {
             targetTopOffset = startTop - view.getTop() + totalDragOffset;
+        }
+
+        public void updateTargetRight() {
+            targetRightOffset = startRight - view.getRight() + totalDragOffset;
         }
 
         public void onDragStop() {
@@ -155,11 +173,17 @@ public class DragLinearLayout extends LinearLayout {
             view = null;
             startVisibility = -1;
             viewDrawable = null;
-            position = -1;
-            startTop = -1;
-            height = -1;
             totalDragOffset = 0;
-            targetTopOffset = 0;
+            position = -1;
+            if (orientation == VERTICAL) {
+                startTop = -1;
+                height = -1;
+                targetTopOffset = 0;
+            } else {
+                startRight = -1;
+                width = -1;
+                targetRightOffset = 0;
+            }
             if (null != settleAnimation) settleAnimation.end();
             settleAnimation = null;
         }
@@ -173,6 +197,7 @@ public class DragLinearLayout extends LinearLayout {
 
     private static final int INVALID_POINTER_ID = -1;
     private int downY = -1;
+    private int downX = -1;
     private int activePointerId = INVALID_POINTER_ID;
 
     /**
@@ -200,8 +225,6 @@ public class DragLinearLayout extends LinearLayout {
     public DragLinearLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        setOrientation(LinearLayout.VERTICAL);
-
         draggableChildren = new SparseArray<>();
 
         draggedItem = new DragItem();
@@ -226,10 +249,7 @@ public class DragLinearLayout extends LinearLayout {
 
     @Override
     public void setOrientation(int orientation) {
-        // enforce VERTICAL orientation; remove if HORIZONTAL support is ever added
-        if (LinearLayout.HORIZONTAL == orientation) {
-            throw new IllegalArgumentException("DragLinearLayout must be VERTICAL.");
-        }
+        this.orientation = orientation;
         super.setOrientation(orientation);
     }
 
@@ -269,7 +289,7 @@ public class DragLinearLayout extends LinearLayout {
             throw new IllegalArgumentException(
                 "Draggable children and their drag handles must not be null.");
         }
-        
+
         if (this == child.getParent()) {
             dragHandle.setOnTouchListener(new DragHandleOnTouchListener(child));
             draggableChildren.put(indexOfChild(child), new DraggableChild());
