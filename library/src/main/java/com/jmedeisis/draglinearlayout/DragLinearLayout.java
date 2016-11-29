@@ -578,7 +578,7 @@ public class DragLinearLayout extends LinearLayout {
 
     int currentLeft = draggedItem.startLeft + draggedItem.totalDragOffset;
 
-    handleContainerScroll(currentLeft);
+    handleHorizontalContainerScroll(currentLeft);
 
     int leftPosition = nextDraggablePosition(draggedItem.position);
     int rightPosition = previousDraggablePosition(draggedItem.position);
@@ -632,6 +632,7 @@ public class DragLinearLayout extends LinearLayout {
           switchAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationStart(Animator animation) {
+              Log.d(LOG_TAG, "Started horizontal animation");
               draggableChildren.get(originalPosition).swapAnimation = switchAnimator;
             }
 
@@ -712,6 +713,36 @@ public class DragLinearLayout extends LinearLayout {
             containerScrollView.post(dragUpdater);
         }
     }
+
+  private void handleHorizontalContainerScroll(final int currentLeft) {
+    if (null != horizontalContainerScrollView) {
+      final int startScrollX = horizontalContainerScrollView.getScrollX();
+      final int absLeft = getLeft() - startScrollX + currentLeft;
+      final int left = horizontalContainerScrollView.getLeft();
+
+      final int delta;
+
+      if (absLeft < scrollSensitiveAreaWidth) {
+        delta = (int) (-MAX_DRAG_SCROLL_SPEED * smootherStep(scrollSensitiveAreaWidth, 0, absLeft));
+      } else if (absLeft > left - scrollSensitiveAreaHeight) {
+        delta = (int) (MAX_DRAG_SCROLL_SPEED * smootherStep(left - scrollSensitiveAreaWidth, left, absLeft));
+      } else {
+        delta = 0;
+      }
+
+      horizontalContainerScrollView.removeCallbacks(dragUpdater);
+      horizontalContainerScrollView.smoothScrollBy(delta, 0);
+      dragUpdater = new Runnable() {
+        @Override
+        public void run() {
+          if (draggedItem.dragging && startScrollX != horizontalContainerScrollView.getScrollX()) {
+            onDragHorizontal(draggedItem.totalDragOffset + delta);
+          }
+        }
+      };
+      containerScrollView.post(dragUpdater);
+    }
+  }
 
     /**
      * By Ken Perlin. See <a href="http://en.wikipedia.org/wiki/Smoothstep">Smoothstep - Wikipedia</a>.
@@ -834,10 +865,14 @@ public class DragLinearLayout extends LinearLayout {
                 if (INVALID_POINTER_ID == activePointerId) break;
 
                 int pointerIndex = event.findPointerIndex(activePointerId);
-                int lastEventValue = (int) (vertical ? MotionEventCompat.getY(event, pointerIndex) : MotionEventCompat.getX(event, pointerIndex);
-                int delta = lastEventValue - downY;
+                int lastEventValue = (int) (vertical ? MotionEventCompat.getY(event, pointerIndex) : MotionEventCompat.getX(event, pointerIndex));
+                int delta = lastEventValue - downX;
 
-                onDrag(delta);
+                if (vertical) {
+                  onDrag(delta);
+                } else {
+                  onDragHorizontal(delta);
+                }
                 return true;
             }
             case MotionEvent.ACTION_POINTER_UP: {

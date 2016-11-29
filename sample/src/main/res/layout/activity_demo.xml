@@ -5,29 +5,24 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:paddingBottom="@dimen/default_vertical_margin"
+    android:orientation="horizontal"
     tools:context=".DemoActivity" >
 
     <TextView
-        android:text="@string/list_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        style="@style/ListHeader" />
-
-    <TextView
         android:text="@string/list_item_1"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="@style/SpaciousListItem" />
 
     <TextView
         android:text="@string/list_item_2"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="@style/SpaciousListItem" />
 
     <TextView
         android:text="@string/list_item_3"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="@style/SpaciousListItem" />
 
@@ -40,13 +35,13 @@
 
     <TextView
         android:text="@string/list_item_4"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="@style/SpaciousListItem" />
 
     <Button
         android:id="@+id/noteDemoButton"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/action_view_note_demo"
         style="@style/MinimalistButton"/>
